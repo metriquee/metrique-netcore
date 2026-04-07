@@ -1,0 +1,30 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+    <PropertyGroup>
+        <TargetFramework>net9.0</TargetFramework>
+        <ImplicitUsings>enable</ImplicitUsings>
+        <Nullable>enable</Nullable>
+        <GeneratePackageOnBuild>true</GeneratePackageOnBuild>
+        <PackageId>Metriquee.NetCore</PackageId>
+        <Version>1.0.0</Version>
+        <Title>Logging, Tracking, Monitoring all in one solution</Title>
+        <Authors>ElkhanB and HamidM</Authors>
+        <Description>Application Logging, Tracking and Monitoring Package</Description>
+        <RepositoryUrl></RepositoryUrl>
+        <RepositoryType>GitHub</RepositoryType>
+        <PackageTags>log, collector, monitoring, tracking</PackageTags>
+        <PackageLicenseExpression>MIT</PackageLicenseExpression>
+        <PackageReadmeFile>README.md</PackageReadmeFile>
+        <IncludeSymbols>true</IncludeSymbols>
+        <SymbolPackageFormat>snupkg</SymbolPackageFormat>
+    </PropertyGroup>
+
+    <ItemGroup>
+        <FrameworkReference Include="Microsoft.AspNetCore.App"/>
+    </ItemGroup>
+
+    <ItemGroup>
+        <None Include="..\README.md" Pack="true" PackagePath="\"/>
+    </ItemGroup>
+
+</Project>
