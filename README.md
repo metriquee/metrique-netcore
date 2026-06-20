@@ -49,12 +49,6 @@ builder.Services.AddMetriquee(opts =>
 });
 ```
 
-The connection string combines the collector endpoint and the ingest key in one value
-(`scheme://<apiKey>@host[:port][/path]`); the package splits it back into the base URL and key it needs.
-
-Events are batched and sent as JSON to `POST {baseUrl}/api/logs` with an `X-Api-Key` header. A batch
-flushes when it reaches `MaxBatchSize`, every `FlushIntervalSeconds`, or on shutdown.
-
 > **Where does the connection string come from?** Register your app in the Metriquee dashboard.
 
 ### Sink modes
