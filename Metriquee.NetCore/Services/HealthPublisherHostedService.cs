@@ -10,12 +10,12 @@ namespace Metriquee.NetCore.Services;
 internal sealed class HealthPublisherHostedService : BackgroundService
 {
     private readonly ILogger<HealthPublisherHostedService> _logger;
-    private readonly LogCollectorOptions _options;
+    private readonly MetriqueeOptions _options;
     private readonly ICollectorSink _sink;
 
     public HealthPublisherHostedService(
         ICollectorSink sink,
-        IOptions<LogCollectorOptions> options,
+        IOptions<MetriqueeOptions> options,
         ILogger<HealthPublisherHostedService> logger)
     {
         _sink = sink;

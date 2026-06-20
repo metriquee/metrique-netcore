@@ -1,6 +1,6 @@
 ﻿namespace Metriquee.NetCore.Options;
 
-public sealed record LogCollectorOptions
+public sealed record MetriqueeOptions
 {
     public HttpOptions Http { get; set; } = new();
     public ExceptionOptions Exceptions { get; set; } = new();

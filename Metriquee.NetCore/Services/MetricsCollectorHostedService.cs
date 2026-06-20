@@ -13,7 +13,7 @@ internal sealed class MetricsCollectorHostedService : BackgroundService
 {
     private readonly RequestCounters _counters;
     private readonly ILogger<MetricsCollectorHostedService> _logger;
-    private readonly LogCollectorOptions _options;
+    private readonly MetriqueeOptions _options;
     private readonly ICollectorSink _sink;
     private DateTimeOffset _lastCheck;
     private TimeSpan _lastCpuTime;
@@ -21,7 +21,7 @@ internal sealed class MetricsCollectorHostedService : BackgroundService
     public MetricsCollectorHostedService(
         ICollectorSink sink,
         RequestCounters counters,
-        IOptions<LogCollectorOptions> options,
+        IOptions<MetriqueeOptions> options,
         ILogger<MetricsCollectorHostedService> logger)
     {
         _sink = sink;

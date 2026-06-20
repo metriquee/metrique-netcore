@@ -14,7 +14,7 @@ namespace Metriquee.NetCore.Middleware;
 
 internal sealed class HttpLoggingMiddleware(
     RequestDelegate next,
-    IOptions<LogCollectorOptions> options,
+    IOptions<MetriqueeOptions> options,
     ICollectorSink sink,
     RequestCounters counters)
 {
@@ -100,7 +100,7 @@ internal sealed class HttpLoggingMiddleware(
     }
 
     private static ReadOnlyDictionary<string, string?[]> FilterHeaders(IHeaderDictionary headers,
-        LogCollectorOptions opt)
+        MetriqueeOptions opt)
     {
         var dict = new Dictionary<string, string?[]>(StringComparer.OrdinalIgnoreCase);
         foreach (var kv in headers)
@@ -112,7 +112,7 @@ internal sealed class HttpLoggingMiddleware(
         return dict.AsReadOnly();
     }
 
-    private static async Task<string?> TryReadRequestBody(HttpContext ctx, LogCollectorOptions opt)
+    private static async Task<string?> TryReadRequestBody(HttpContext ctx, MetriqueeOptions opt)
     {
         // No buffer limit: capping it here would make EnableBuffering throw on any body larger
         // than the *log* cap, failing the request. We only want to log a prefix, never reject.
@@ -134,7 +134,7 @@ internal sealed class HttpLoggingMiddleware(
         }
     }
 
-    private static string? TryReadResponseBody(MemoryStream captured, LogCollectorOptions opt)
+    private static string? TryReadResponseBody(MemoryStream captured, MetriqueeOptions opt)
     {
         if (!opt.Http.ShouldCaptureResponseBody || captured.Length == 0) return null;
 

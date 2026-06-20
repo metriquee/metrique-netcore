@@ -12,13 +12,13 @@ using Microsoft.Extensions.Options;
 
 namespace Metriquee.NetCore.Extensions;
 
-public static class LogCollectorExtensions
+public static class MetriqueeExtensions
 {
-    public static IServiceCollection AddLogCollector(
+    public static IServiceCollection AddMetriquee(
         this IServiceCollection services,
-        Action<LogCollectorOptions>? configure = null)
+        Action<MetriqueeOptions>? configure = null)
     {
-        services.AddOptions<LogCollectorOptions>()
+        services.AddOptions<MetriqueeOptions>()
             .Validate(o => !o.Sender.EnableSenderSink ||
                            SenderConnectionString.TryParse(o.Sender.ConnectionString, out _, out _),
                 "Sender sink is enabled but Sender.ConnectionString is missing or invalid " +
@@ -27,11 +27,11 @@ public static class LogCollectorExtensions
         if (configure is not null) services.Configure(configure);
 
         services.TryAddSingleton<RequestCounters>();
-        services.AddHttpClient("LogCollector");
+        services.AddHttpClient("Metriquee");
 
         services.TryAddSingleton<ICollectorSink>(sp =>
         {
-            var options = sp.GetRequiredService<IOptions<LogCollectorOptions>>().Value;
+            var options = sp.GetRequiredService<IOptions<MetriqueeOptions>>().Value;
 
             var loggerSink = ActivatorUtilities.CreateInstance<LoggerCollectorSink>(sp);
             var senderSink = ActivatorUtilities.CreateInstance<SenderCollectorSink>(sp);
@@ -50,13 +50,13 @@ public static class LogCollectorExtensions
 
         services.AddSingleton<IHostedService>(sp =>
         {
-            var opts = sp.GetRequiredService<IOptions<LogCollectorOptions>>().Value;
+            var opts = sp.GetRequiredService<IOptions<MetriqueeOptions>>().Value;
             if (!opts.Sender.EnableSenderSink)
                 return NoOpHostedService.Instance;
 
             var sink = sp.GetRequiredService<ICollectorSink>();
 
-            // Extract HttpLogCollectorSink from composite or direct
+            // Extract the SenderCollectorSink from composite or direct
             if (sink is SenderCollectorSink httpSink)
                 return httpSink;
 
@@ -76,7 +76,7 @@ public static class LogCollectorExtensions
         return services;
     }
 
-    public static IApplicationBuilder UseLogCollector(this IApplicationBuilder app)
+    public static IApplicationBuilder UseMetriquee(this IApplicationBuilder app)
     {
         app.UseMiddleware<HttpLoggingMiddleware>();
         app.UseMiddleware<ExceptionLoggingMiddleware>();

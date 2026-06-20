@@ -27,23 +27,23 @@ This is a .NET 9 NuGet package library (`Metriquee.NetCore`) that provides ASP.N
 
 ### Consumer integration point
 
-Consumers call two extension methods in `Extensions/LogCollectorExtensions.cs`:
-- `services.AddLogCollector(opts => ...)` — registers services, options, and background hosted services
-- `app.UseLogCollector()` — adds the middleware to the pipeline
+Consumers call two extension methods in `Extensions/MetriqueeExtensions.cs`:
+- `services.AddMetriquee(opts => ...)` — registers services, options, and background hosted services
+- `app.UseMetriquee()` — adds the middleware to the pipeline
 
 ### Sink abstraction
 
-All collected data flows through `ILogCollectorSink` (in `Abstractions/`), which has four track methods: `TrackHttpAsync`, `TrackExceptionAsync`, `TrackMetricsAsync`, `TrackHealthAsync`. The default implementation (`Sinks/LoggerLogCollectorSink`) writes to `ILogger`. Custom sinks (e.g., HTTP-based transport to a central collector) can replace it via DI.
+All collected data flows through `ICollectorSink` (in `Abstractions/`), which has four track methods: `TrackHttpAsync`, `TrackExceptionAsync`, `TrackMetricsAsync`, `TrackHealthAsync`. The default implementation (`Sinks/LoggerCollectorSink`) writes to `ILogger`. Custom sinks (e.g., HTTP-based transport to a central collector) can replace it via DI.
 
 ### Data flow
 
-1. **HTTP & Exceptions** — `Middleware/LogCollectorMiddleware` intercepts every request. It captures request/response bodies (via a `TeeStream` that writes to both the original stream and a memory buffer), measures duration, and catches unhandled exceptions. All data is sent to `ILogCollectorSink`.
+1. **HTTP & Exceptions** — `Middleware/HttpLoggingMiddleware` and `Middleware/ExceptionLoggingMiddleware` intercept every request. They capture request/response bodies (via a `TeeStream` that writes to both the original stream and a memory buffer), measure duration, and catch unhandled exceptions. All data is sent to `ICollectorSink`.
 2. **Metrics** — `Services/MetricsCollectorHostedService` runs as a `BackgroundService` on a periodic timer. It reads process CPU, working set, managed heap, GC generation counts, thread pool stats, and requests-per-second (from `Internal/RequestCounters`, which the middleware increments).
 3. **Health** — `Services/HealthPublisherHostedService` runs as a `BackgroundService` and periodically publishes health status to the sink.
 
 ### Configuration
 
-`Options/LogCollectorOptions` is the root config object (requires `ApiKey`). It composes:
+`Options/MetriqueeOptions` is the root config object (the sender sink requires `Sender.ConnectionString`). It composes:
 - `HttpOptions` — toggle HTTP logging, body capture predicates, max body size, excluded paths, sensitive headers, masked JSON fields
 - `ExceptionOptions` — toggle exception logging, stack trace limits, excluded exception types
 - `MetricsOptions` — toggle and interval
@@ -53,9 +53,9 @@ All collected data flows through `ILogCollectorSink` (in `Abstractions/`), which
 ### Key conventions
 
 - All models (`Models/`) and internal services are `internal sealed record` / `internal sealed class`
-- Public API surface is limited to: `LogCollectorOptions` and its sub-option records, plus the two extension methods
+- Public API surface is limited to: `MetriqueeOptions` and its sub-option records, plus the two extension methods
 - Uses C# primary constructors and file-scoped namespaces throughout
-- `ILogCollectorSink` is registered with `TryAddSingleton`, so consumers can register their own implementation before calling `AddLogCollector`
+- `ICollectorSink` is registered with `TryAddSingleton`, so a custom sink registered before `AddMetriquee` wins
 
 ## Security Note
 

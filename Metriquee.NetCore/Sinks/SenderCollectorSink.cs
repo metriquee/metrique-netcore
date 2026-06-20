@@ -13,7 +13,7 @@ namespace Metriquee.NetCore.Sinks;
 
 internal sealed class SenderCollectorSink(
     IHttpClientFactory httpClientFactory,
-    IOptions<LogCollectorOptions> options,
+    IOptions<MetriqueeOptions> options,
     ILogger<SenderCollectorSink> logger) : ICollectorSink, IHostedService, IAsyncDisposable
 {
     private readonly CancellationTokenSource _cts = new();
@@ -27,7 +27,7 @@ internal sealed class SenderCollectorSink(
     private PeriodicTimer? _timer;
     private Task? _timerTask;
 
-    private LogCollectorOptions Options => options.Value;
+    private MetriqueeOptions Options => options.Value;
 
     public async ValueTask DisposeAsync()
     {
@@ -168,7 +168,7 @@ internal sealed class SenderCollectorSink(
     {
         try
         {
-            var client = httpClientFactory.CreateClient("LogCollector");
+            var client = httpClientFactory.CreateClient("Metriquee");
             var baseUrl = Options.Sender.BaseUrl.TrimEnd('/');
 
             using var request = new HttpRequestMessage(HttpMethod.Post, $"{baseUrl}/api/logs");

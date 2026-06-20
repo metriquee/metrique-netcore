@@ -28,10 +28,10 @@ Two lines — logs everything to `ILogger` with default settings:
 using Metriquee.NetCore.Extensions;
 
 var builder = WebApplication.CreateBuilder(args);
-builder.Services.AddLogCollector();   // 1. register
+builder.Services.AddMetriquee();   // 1. register
 
 var app = builder.Build();
-app.UseLogCollector();                // 2. add middleware
+app.UseMetriquee();                   // 2. add middleware
 app.Run();
 ```
 
@@ -41,7 +41,7 @@ To ship telemetry to a remote collector instead of (or as well as) `ILogger`, en
 and paste the **connection string** you got when you registered the app:
 
 ```csharp
-builder.Services.AddLogCollector(opts =>
+builder.Services.AddMetriquee(opts =>
 {
     opts.Sender.EnableLoggerSink = false;   // turn off local logging
     opts.Sender.EnableSenderSink = true;    // turn on HTTP transport
@@ -70,7 +70,7 @@ flushes when it reaches `MaxBatchSize`, every `FlushIntervalSeconds`, or on shut
 
 ## Configuration
 
-All settings live on `LogCollectorOptions`, passed to `AddLogCollector(opts => ...)`.
+All settings live on `MetriqueeOptions`, passed to `AddMetriquee(opts => ...)`.
 
 **Sender** — `opts.Sender`
 
@@ -123,7 +123,7 @@ All settings live on `LogCollectorOptions`, passed to `AddLogCollector(opts => .
 ### Full example
 
 ```csharp
-builder.Services.AddLogCollector(opts =>
+builder.Services.AddMetriquee(opts =>
 {
     opts.Sender.EnableSenderSink = true;
     opts.Sender.ConnectionString = "https://mq_live_abc123@collector.example.com";
@@ -147,7 +147,7 @@ Bind the options from configuration instead of (or alongside) code:
 
 ```json
 {
-  "LogCollector": {
+  "Metriquee": {
     "Sender":     { "EnableSenderSink": true, "ConnectionString": "https://mq_live_abc123@collector.example.com" },
     "Http":       { "ShouldCaptureRequestBody": true, "ShouldCaptureResponseBody": true, "MaxBodyBytes": 4096,
                     "ExcludedPaths": ["/health", "/swagger"], "MaskedFields": ["password", "secret"] },
@@ -159,9 +159,9 @@ Bind the options from configuration instead of (or alongside) code:
 ```
 
 ```csharp
-builder.Services.AddLogCollector();
-builder.Services.Configure<Metriquee.NetCore.Options.LogCollectorOptions>(
-    builder.Configuration.GetSection("LogCollector"));
+builder.Services.AddMetriquee();
+builder.Services.Configure<Metriquee.NetCore.Options.MetriqueeOptions>(
+    builder.Configuration.GetSection("Metriquee"));
 ```
 
 ---

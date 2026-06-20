@@ -9,7 +9,7 @@ namespace Metriquee.NetCore.Middleware;
 
 internal sealed class ExceptionLoggingMiddleware(
     RequestDelegate next,
-    IOptions<LogCollectorOptions> options,
+    IOptions<MetriqueeOptions> options,
     ICollectorSink sink)
 {
     public async Task Invoke(HttpContext context)
