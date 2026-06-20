@@ -6,7 +6,7 @@
         <Nullable>enable</Nullable>
         <GeneratePackageOnBuild>true</GeneratePackageOnBuild>
         <PackageId>Metriquee.NetCore</PackageId>
-        <Version>1.0.1</Version>
+        <Version>1.0.2</Version>
         <Title>Logging, Tracking, Monitoring all in one solution</Title>
         <Authors>Hamid Musayev</Authors>
         <Description>Drop-in middleware that automatically monitors your ASP.NET Core app. It tracks:

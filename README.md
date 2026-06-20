@@ -7,7 +7,7 @@ Drop-in middleware that automatically monitors your ASP.NET Core app. It tracks:
 - **HTTP requests** — path, method, status, duration, headers, optional bodies
 - **Exceptions** — unhandled exceptions with inner chain and stack trace
 - **Runtime metrics** — CPU, memory, GC, thread pool, requests/sec
-- **Health** — periodic health status
+- **Health** — periodic status, plus your own custom health checks
 
 Collected data flows to a configurable **sink**: write to `ILogger` (default), POST to a remote
 collector over HTTP, or both.
@@ -68,6 +68,48 @@ flushes when it reaches `MaxBatchSize`, every `FlushIntervalSeconds`, or on shut
 
 ---
 
+## Custom health checks
+
+Write your own checks the same way you would with ASP.NET Core's `IHealthCheck`, but using the
+package's `IMetriqueeChecker` interface. Each check runs on its own interval and shows up in the
+dashboard under the name you give it, with its status, interval, last-run time, and message.
+
+```csharp
+using Metriquee.NetCore.Checks;
+
+public sealed class DatabaseHealthCheck(MyDbContext db) : IMetriqueeChecker
+{
+    public async Task<MetriqueeCheckResult> CheckHealthAsync(CancellationToken ct = default)
+    {
+        if (await db.Database.CanConnectAsync(ct))
+            return MetriqueeCheckResult.Healthy("Database reachable");
+
+        return MetriqueeCheckResult.Unhealthy("Cannot reach database");
+    }
+}
+```
+
+Register it with `AddChecker<T>(name, intervalSeconds)`:
+
+```csharp
+builder.Services.AddMetriquee(opts =>
+{
+    opts.Health.AddChecker<DatabaseHealthCheck>("database", 30);            // runs every 30s
+    opts.Health.AddChecker<RedisHealthCheck>("redis", 15, isEnabled: false); // registered but off
+});
+```
+
+- **Return a result** with `MetriqueeCheckResult.Healthy(...)`, `.Degraded(...)`, or
+  `.Unhealthy(message, exception)`. Each accepts an optional `description` and a `data` dictionary.
+- **Dependency injection works** — checkers are resolved from a fresh DI scope on every run, so you
+  can inject scoped services such as a `DbContext`.
+- **Exceptions are caught** — if `CheckHealthAsync` throws, the check is reported as `Unhealthy`
+  with the exception message; one failing check never stops the others.
+- **`isEnabled: false`** keeps a check registered but does not run it (it won't appear in the dashboard).
+- The overall health status is the worst of all checks, published every `Health.IntervalSeconds`.
+
+---
+
 ## Configuration
 
 All settings live on `MetriqueeOptions`, passed to `AddMetriquee(opts => ...)`.
@@ -111,6 +153,9 @@ All settings live on `MetriqueeOptions`, passed to `AddMetriquee(opts => ...)`.
 | `Metrics.IntervalSeconds` | `30`    | Seconds between metrics samples  |
 | `Health.IsEnabled`        | `true`  | Enable health publishing         |
 | `Health.IntervalSeconds`  | `60`    | Seconds between health publishes |
+
+Register custom checks with `opts.Health.AddChecker<T>(name, intervalSeconds)` — see
+[Custom health checks](#custom-health-checks).
 
 **Batch** (sender sink) — `opts.Batch`
 

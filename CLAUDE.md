@@ -39,7 +39,7 @@ All collected data flows through `ICollectorSink` (in `Abstractions/`), which ha
 
 1. **HTTP & Exceptions** — `Middleware/HttpLoggingMiddleware` and `Middleware/ExceptionLoggingMiddleware` intercept every request. They capture request/response bodies (via a `TeeStream` that writes to both the original stream and a memory buffer), measure duration, and catch unhandled exceptions. All data is sent to `ICollectorSink`.
 2. **Metrics** — `Services/MetricsCollectorHostedService` runs as a `BackgroundService` on a periodic timer. It reads process CPU, working set, managed heap, GC generation counts, thread pool stats, and requests-per-second (from `Internal/RequestCounters`, which the middleware increments).
-3. **Health** — `Services/HealthPublisherHostedService` runs as a `BackgroundService` and periodically publishes health status to the sink.
+3. **Health** — `Services/HealthPublisherHostedService` runs as a `BackgroundService`. When custom checks are registered (`opts.Health.AddChecker<T>(name, intervalSeconds, isEnabled)`), it runs each `IMetriqueeChecker` (in `Checks/`) on its own interval inside a fresh DI scope, keeps the latest result per check name in memory, and publishes them together as one `HealthEvent` (`Category "custom"`, overall `Status` = worst of all checks) every `Health.IntervalSeconds`. A throwing check is recorded as `Unhealthy`. When no checks are registered it falls back to publishing a single `Healthy` `self` status. Checks return a `MetriqueeCheckResult` (`Healthy`/`Degraded`/`Unhealthy` helpers). Checker types are registered in DI as scoped by `AddMetriquee` (discovered by running the `configure` lambda once on a probe `MetriqueeOptions`).
 
 ### Configuration
 
@@ -53,7 +53,7 @@ All collected data flows through `ICollectorSink` (in `Abstractions/`), which ha
 ### Key conventions
 
 - All models (`Models/`) and internal services are `internal sealed record` / `internal sealed class`
-- Public API surface is limited to: `MetriqueeOptions` and its sub-option records, plus the two extension methods
+- Public API surface is limited to: `MetriqueeOptions` and its sub-option records, the two extension methods, and the custom-check API in `Checks/` (`IMetriqueeChecker`, `MetriqueeCheckResult`, `MetriqueeHealthStatus`)
 - Uses C# primary constructors and file-scoped namespaces throughout
 - `ICollectorSink` is registered with `TryAddSingleton`, so a custom sink registered before `AddMetriquee` wins
 

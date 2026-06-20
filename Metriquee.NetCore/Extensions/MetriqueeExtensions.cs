@@ -24,7 +24,19 @@ public static class MetriqueeExtensions
                 "Sender sink is enabled but Sender.ConnectionString is missing or invalid " +
                 "(expected scheme://<apiKey>@host).")
             .ValidateOnStart();
-        if (configure is not null) services.Configure(configure);
+        if (configure is not null)
+        {
+            services.Configure(configure);
+
+            // Run the lambda once on a throwaway options instance to discover the registered
+            // checker types, then register each enabled one in DI as scoped (so a check can
+            // depend on scoped services such as a DbContext). The hosted service reads the real
+            // names/intervals later from IOptions<MetriqueeOptions>.
+            var probe = new MetriqueeOptions();
+            configure(probe);
+            foreach (var checker in probe.Health.Checkers.Where(c => c.IsEnabled))
+                services.TryAddScoped(checker.CheckerType);
+        }
 
         services.TryAddSingleton<RequestCounters>();
         services.AddHttpClient("Metriquee");

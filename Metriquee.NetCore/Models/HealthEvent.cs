@@ -16,4 +16,8 @@ internal sealed record HealthEntry
     public string? ExceptionMessage { get; init; }
     public IReadOnlyDictionary<string, object?>? Data { get; init; }
     public TimeSpan Duration { get; init; }
+
+    // Custom-check metadata: how often the check runs and when it last ran.
+    public int? IntervalSeconds { get; init; }
+    public DateTimeOffset? LastCheckedAt { get; init; }
 }
