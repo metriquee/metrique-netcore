@@ -71,7 +71,7 @@ internal sealed class ExceptionLoggingMiddleware(
     {
         if (maxLines <= 0 || string.IsNullOrEmpty(stackTrace)) return stackTrace;
 
-        var lines = stackTrace.Split('\n');
+        var lines = stackTrace.ReplaceLineEndings("\n").Split('\n');
         if (lines.Length <= maxLines) return stackTrace;
 
         return string.Join('\n', lines.Take(maxLines)) + $"\n... truncated ({lines.Length - maxLines} more lines)";

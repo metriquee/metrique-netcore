@@ -49,7 +49,7 @@ internal sealed class HttpLoggingMiddleware(
         if (opt.Http.ShouldCaptureResponseBody && context.Response.Body.CanWrite)
         {
             responseCapture = new MemoryStream();
-            context.Response.Body = new TeeStream(originalResponseBody, responseCapture);
+            context.Response.Body = new TeeStream(originalResponseBody, responseCapture, opt.Http.MaxBodyBytes);
         }
 
         // OnCompleted fires after the response is fully flushed to the client,
@@ -65,8 +65,15 @@ internal sealed class HttpLoggingMiddleware(
             stopwatch.Stop();
 
             string? responseBody = null;
-            if (responseCapture is not null)
-                responseBody = TryReadResponseBody(responseCapture, opt);
+            try
+            {
+                if (responseCapture is not null)
+                    responseBody = TryReadResponseBody(responseCapture, opt);
+            }
+            finally
+            {
+                responseCapture?.Dispose();
+            }
 
             var httpEvent = new HttpEvent
             {
@@ -77,7 +84,9 @@ internal sealed class HttpLoggingMiddleware(
                 DurationMs = stopwatch.ElapsedMilliseconds,
                 Headers = FilterHeaders(context.Request.Headers, opt),
                 RequestSizeBytes = context.Request.ContentLength,
-                ResponseSizeBytes = context.Response.ContentLength ?? responseCapture?.Length,
+                // Capture is capped at MaxBodyBytes, so its length is not a reliable size —
+                // only report the declared Content-Length, leaving null when unknown.
+                ResponseSizeBytes = context.Response.ContentLength,
                 RequestBody = requestBody,
                 ResponseBody = responseBody,
                 TraceId = traceId
@@ -105,15 +114,24 @@ internal sealed class HttpLoggingMiddleware(
 
     private static async Task<string?> TryReadRequestBody(HttpContext ctx, LogCollectorOptions opt)
     {
-        ctx.Request.EnableBuffering(opt.Http.MaxBodyBytes, opt.Http.MaxBodyBytes);
-        ctx.Request.Body.Position = 0;
+        // No buffer limit: capping it here would make EnableBuffering throw on any body larger
+        // than the *log* cap, failing the request. We only want to log a prefix, never reject.
+        try
+        {
+            ctx.Request.EnableBuffering();
+            ctx.Request.Body.Position = 0;
 
-        using var reader = new StreamReader(ctx.Request.Body, Encoding.UTF8, false, leaveOpen: true);
-        var body = await reader.ReadToEndAsync();
-        ctx.Request.Body.Position = 0;
+            using var reader = new StreamReader(ctx.Request.Body, Encoding.UTF8, false, leaveOpen: true);
+            var body = await reader.ReadToEndAsync();
+            ctx.Request.Body.Position = 0;
 
-        if (body.Length > opt.Http.MaxBodyBytes) body = body[..opt.Http.MaxBodyBytes];
-        return MaskJsonFields(body, opt.Http.MaskedFields);
+            return MaskJsonFields(TruncateToUtf8Bytes(body, opt.Http.MaxBodyBytes), opt.Http.MaskedFields);
+        }
+        catch
+        {
+            // Body capture must never affect request handling.
+            return null;
+        }
     }
 
     private static string? TryReadResponseBody(MemoryStream captured, LogCollectorOptions opt)
@@ -126,9 +144,24 @@ internal sealed class HttpLoggingMiddleware(
         var body = reader.ReadToEnd();
 
         if (string.IsNullOrWhiteSpace(body)) return null;
-        if (body.Length > opt.Http.MaxBodyBytes) body = body[..opt.Http.MaxBodyBytes];
 
-        return MaskJsonFields(body, opt.Http.MaskedFields);
+        return MaskJsonFields(TruncateToUtf8Bytes(body, opt.Http.MaxBodyBytes), opt.Http.MaskedFields);
+    }
+
+    // Truncates a string so its UTF-8 encoding is at most maxBytes, without splitting a
+    // multi-byte character. Returns the input unchanged when it already fits.
+    private static string TruncateToUtf8Bytes(string value, int maxBytes)
+    {
+        if (maxBytes <= 0 || string.IsNullOrEmpty(value)) return value;
+        if (Encoding.UTF8.GetByteCount(value) <= maxBytes) return value;
+
+        var bytes = Encoding.UTF8.GetBytes(value);
+        var count = maxBytes;
+        // Walk back off any continuation byte (10xxxxxx) so we cut on a char boundary.
+        while (count > 0 && (bytes[count] & 0b1100_0000) == 0b1000_0000)
+            count--;
+
+        return Encoding.UTF8.GetString(bytes, 0, count);
     }
 
     private static string MaskJsonFields(string body, HashSet<string> maskedFields)
@@ -167,8 +200,13 @@ internal sealed class HttpLoggingMiddleware(
         }
     }
 
-    private sealed class TeeStream(Stream original, MemoryStream capture) : Stream
+    // Passes every write straight through to the original response stream, while mirroring
+    // at most maxCaptureBytes into the capture buffer. This bounds memory to the log cap even
+    // for large or streaming responses, instead of duplicating the entire payload in RAM.
+    private sealed class TeeStream(Stream original, MemoryStream capture, int maxCaptureBytes) : Stream
     {
+        private int CaptureRemaining => maxCaptureBytes - (int)capture.Length;
+
         public override bool CanRead => false;
         public override bool CanSeek => false;
         public override bool CanWrite => true;
@@ -207,21 +245,27 @@ internal sealed class HttpLoggingMiddleware(
 
         public override void Write(byte[] buffer, int offset, int count)
         {
-            capture.Write(buffer, offset, count);
+            var capturable = Math.Min(count, CaptureRemaining);
+            if (capturable > 0)
+                capture.Write(buffer, offset, capturable);
             original.Write(buffer, offset, count);
         }
 
         public override async Task WriteAsync(byte[] buffer, int offset, int count,
             CancellationToken cancellationToken)
         {
-            await capture.WriteAsync(buffer.AsMemory(offset, count), cancellationToken);
+            var capturable = Math.Min(count, CaptureRemaining);
+            if (capturable > 0)
+                await capture.WriteAsync(buffer.AsMemory(offset, capturable), cancellationToken);
             await original.WriteAsync(buffer.AsMemory(offset, count), cancellationToken);
         }
 
         public override async ValueTask WriteAsync(ReadOnlyMemory<byte> buffer,
             CancellationToken cancellationToken = default)
         {
-            await capture.WriteAsync(buffer, cancellationToken);
+            var capturable = Math.Min(buffer.Length, CaptureRemaining);
+            if (capturable > 0)
+                await capture.WriteAsync(buffer[..capturable], cancellationToken);
             await original.WriteAsync(buffer, cancellationToken);
         }
     }

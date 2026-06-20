@@ -35,7 +35,8 @@ internal sealed class MetricsCollectorHostedService : BackgroundService
         if (!_options.Metrics.IsEnabled) return;
 
         var interval = TimeSpan.FromSeconds(_options.Metrics.IntervalSeconds);
-        _lastCpuTime = Process.GetCurrentProcess().TotalProcessorTime;
+        using (var process = Process.GetCurrentProcess())
+            _lastCpuTime = process.TotalProcessorTime;
         _lastCheck = DateTimeOffset.UtcNow;
 
         while (!stoppingToken.IsCancellationRequested)
@@ -57,7 +58,7 @@ internal sealed class MetricsCollectorHostedService : BackgroundService
     private async Task CollectAndPublishMetricsAsync(CancellationToken ct)
     {
         var now = DateTimeOffset.UtcNow;
-        var process = Process.GetCurrentProcess();
+        using var process = Process.GetCurrentProcess();
 
         var workingSet = process.WorkingSet64;
         var managedHeap = GC.GetTotalMemory(false);

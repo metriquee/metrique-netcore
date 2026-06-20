@@ -6,23 +6,24 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ```bash
 # Build
-dotnet build LogCollectorPackage.sln
+dotnet build Metriquee.sln
 
-# Build release (also generates NuGet package via GeneratePackageOnBuild)
-dotnet build LogCollectorPackage.sln -c Release
+# Build release (also generates the NuGet package via GeneratePackageOnBuild)
+dotnet build Metriquee.sln -c Release
 
 # Pack explicitly
-dotnet pack CollectorPackage/CollectorPackage.csproj -c Release
+dotnet pack Metriquee.NetCore/Metriquee.NetCore.csproj -c Release
 
-# Push to private Nexus repository
-dotnet nuget push "CollectorPackage\bin\Release\CollectorPackage.*.nupkg" --source NexusPrivate --skip-duplicate
+# Push (supply the API key via env/CI secret — never inline it)
+dotnet nuget push "Metriquee.NetCore\bin\Release\Metriquee.NetCore.*.nupkg" \
+  --api-key "$NUGET_API_KEY" --source <your-nuget-source> --skip-duplicate
 ```
 
 There are no tests in the repository currently.
 
 ## Architecture
 
-This is a .NET 9 NuGet package library (`CollectorPackage`) that provides ASP.NET Core middleware for automatic application monitoring. It tracks HTTP requests, exceptions, runtime metrics (CPU, memory, GC, thread pool), and health status. It is **not** a runnable application — it's consumed by other ASP.NET Core apps.
+This is a .NET 9 NuGet package library (`Metriquee.NetCore`) that provides ASP.NET Core middleware for automatic application monitoring. It tracks HTTP requests, exceptions, runtime metrics (CPU, memory, GC, thread pool), and health status. It is **not** a runnable application — it's consumed by other ASP.NET Core apps.
 
 ### Consumer integration point
 
@@ -47,7 +48,7 @@ All collected data flows through `ILogCollectorSink` (in `Abstractions/`), which
 - `ExceptionOptions` — toggle exception logging, stack trace limits, excluded exception types
 - `MetricsOptions` — toggle and interval
 - `HealthOptions` — toggle and interval
-- `BatchOptions` — batch size, payload limit, flush interval (defined but not yet wired)
+- `BatchOptions` — batch size, payload limit, flush interval (used by the sender sink: `MaxBatchSize` triggers a flush, `FlushIntervalSeconds` drives the periodic timer, `MaxPayloadSizeMb` splits oversized batches)
 
 ### Key conventions
 
@@ -58,4 +59,7 @@ All collected data flows through `ILogCollectorSink` (in `Abstractions/`), which
 
 ## Security Note
 
-`nuget.config` contains cleartext credentials and `README.md` contains an API key. These should be moved to environment variables or a secrets manager and excluded from version control.
+`RELEASE.MD` previously contained a cleartext NuGet API key in the `dotnet nuget push` command. It
+has been replaced with a `$NUGET_API_KEY` placeholder, but the original key is still in git history —
+**rotate it** and supply the key via an environment variable or CI secret going forward. Never inline
+publish credentials in tracked files.

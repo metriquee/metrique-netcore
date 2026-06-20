@@ -1,5 +1,6 @@
 using System.Collections.Concurrent;
 using System.Net.Http.Json;
+using System.Text;
 using System.Text.Json;
 using Metriquee.NetCore.Abstractions;
 using Metriquee.NetCore.Models;
@@ -22,6 +23,7 @@ internal sealed class SenderCollectorSink(
     private readonly ConcurrentQueue<MetricsEvent> _metricsEvents = new();
 
     private int _eventCount;
+    private volatile bool _disposed;
     private PeriodicTimer? _timer;
     private Task? _timerTask;
 
@@ -29,19 +31,10 @@ internal sealed class SenderCollectorSink(
 
     public async ValueTask DisposeAsync()
     {
-        await _cts.CancelAsync();
-        _timer?.Dispose();
+        if (_disposed) return;
+        _disposed = true;
 
-        if (_timerTask is not null)
-            try
-            {
-                await _timerTask;
-            }
-            catch (OperationCanceledException)
-            {
-            }
-
-        await FlushAsync(CancellationToken.None);
+        await ShutdownAsync(CancellationToken.None);
         _cts.Dispose();
     }
 
@@ -84,9 +77,17 @@ internal sealed class SenderCollectorSink(
         return Task.CompletedTask;
     }
 
-    public async Task StopAsync(CancellationToken cancellationToken)
+    public Task StopAsync(CancellationToken cancellationToken)
     {
-        await _cts.CancelAsync();
+        return ShutdownAsync(cancellationToken);
+    }
+
+    // Shared by StopAsync and DisposeAsync: cancel the timer loop, wait for it to finish,
+    // and flush any remaining buffered events. Safe to call more than once.
+    private async Task ShutdownAsync(CancellationToken cancellationToken)
+    {
+        if (!_cts.IsCancellationRequested)
+            await _cts.CancelAsync();
         _timer?.Dispose();
 
         if (_timerTask is not null)
@@ -139,35 +140,28 @@ internal sealed class SenderCollectorSink(
             HealthEvents = healthEvents
         };
 
-        var json = JsonSerializer.Serialize(payload);
-        if (json.Length <= maxSize)
+        var totalEvents = httpEvents.Count + exceptionEvents.Count + metricsEvents.Count + healthEvents.Count;
+
+        // Fits within the limit, or is a single event that cannot be split further — send as one.
+        if (totalEvents <= 1 ||
+            Encoding.UTF8.GetByteCount(JsonSerializer.Serialize(payload)) <= maxSize)
             return [payload];
 
-        // Split into smaller batches
-        var batches = new List<BatchPayload>();
-        var totalEvents = httpEvents.Count + exceptionEvents.Count + metricsEvents.Count + healthEvents.Count;
-        var chunkSize = Math.Max(1, totalEvents / 2);
+        // Halve every event list and recurse on each side until each batch fits.
+        var (httpA, httpB) = SplitHalf(httpEvents);
+        var (exA, exB) = SplitHalf(exceptionEvents);
+        var (metA, metB) = SplitHalf(metricsEvents);
+        var (healthA, healthB) = SplitHalf(healthEvents);
 
-        var httpChunks = Chunk(httpEvents, chunkSize);
-        var exChunks = Chunk(exceptionEvents, chunkSize);
-        var metChunks = Chunk(metricsEvents, chunkSize);
-        var healthChunks = Chunk(healthEvents, chunkSize);
-
-        var maxChunks = Math.Max(Math.Max(httpChunks.Count, exChunks.Count),
-            Math.Max(metChunks.Count, healthChunks.Count));
-
-        for (var i = 0; i < maxChunks; i++)
-            batches.Add(new BatchPayload
-            {
-                ApiKey = Options.Sender.ApiKey,
-                FlushedAt = DateTimeOffset.UtcNow,
-                HttpEvents = i < httpChunks.Count ? httpChunks[i] : [],
-                ExceptionEvents = i < exChunks.Count ? exChunks[i] : [],
-                MetricsEvents = i < metChunks.Count ? metChunks[i] : [],
-                HealthEvents = i < healthChunks.Count ? healthChunks[i] : []
-            });
-
+        var batches = BuildBatches(httpA, exA, metA, healthA);
+        batches.AddRange(BuildBatches(httpB, exB, metB, healthB));
         return batches;
+    }
+
+    private static (List<T> First, List<T> Second) SplitHalf<T>(List<T> source)
+    {
+        var mid = source.Count / 2;
+        return (source.GetRange(0, mid), source.GetRange(mid, source.Count - mid));
     }
 
     private async Task SendBatchAsync(BatchPayload batch, CancellationToken ct)
@@ -196,13 +190,5 @@ internal sealed class SenderCollectorSink(
         while (queue.TryDequeue(out var item))
             items.Add(item);
         return items;
-    }
-
-    private static List<List<T>> Chunk<T>(List<T> source, int chunkSize)
-    {
-        var chunks = new List<List<T>>();
-        for (var i = 0; i < source.Count; i += chunkSize)
-            chunks.Add(source.GetRange(i, Math.Min(chunkSize, source.Count - i)));
-        return chunks;
     }
 }

@@ -18,7 +18,12 @@ public static class LogCollectorExtensions
         this IServiceCollection services,
         Action<LogCollectorOptions>? configure = null)
     {
-        services.AddOptions<LogCollectorOptions>();
+        services.AddOptions<LogCollectorOptions>()
+            .Validate(o => !o.Sender.EnableSenderSink ||
+                           (!string.IsNullOrWhiteSpace(o.Sender.BaseUrl) &&
+                            !string.IsNullOrWhiteSpace(o.Sender.ApiKey)),
+                "Sender sink is enabled but Sender.BaseUrl and/or Sender.ApiKey are not configured.")
+            .ValidateOnStart();
         if (configure is not null) services.Configure(configure);
 
         services.TryAddSingleton<RequestCounters>();
@@ -35,7 +40,7 @@ public static class LogCollectorExtensions
             {
                 { EnableLoggerSink: true, EnableSenderSink: false } => loggerSink,
                 { EnableLoggerSink: false, EnableSenderSink: true } => senderSink,
-                { EnableSenderSink: true, EnableSenderSink: true } =>
+                { EnableLoggerSink: true, EnableSenderSink: true } =>
                     new CompositeCollectorSink([
                         loggerSink, senderSink
                     ]),
