@@ -20,9 +20,9 @@ public static class LogCollectorExtensions
     {
         services.AddOptions<LogCollectorOptions>()
             .Validate(o => !o.Sender.EnableSenderSink ||
-                           (!string.IsNullOrWhiteSpace(o.Sender.BaseUrl) &&
-                            !string.IsNullOrWhiteSpace(o.Sender.ApiKey)),
-                "Sender sink is enabled but Sender.BaseUrl and/or Sender.ApiKey are not configured.")
+                           SenderConnectionString.TryParse(o.Sender.ConnectionString, out _, out _),
+                "Sender sink is enabled but Sender.ConnectionString is missing or invalid " +
+                "(expected scheme://<apiKey>@host).")
             .ValidateOnStart();
         if (configure is not null) services.Configure(configure);
 

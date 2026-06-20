@@ -21,9 +21,9 @@ internal sealed class SenderCollectorSink(
     private readonly ConcurrentQueue<HealthEvent> _healthEvents = new();
     private readonly ConcurrentQueue<HttpEvent> _httpEvents = new();
     private readonly ConcurrentQueue<MetricsEvent> _metricsEvents = new();
+    private volatile bool _disposed;
 
     private int _eventCount;
-    private volatile bool _disposed;
     private PeriodicTimer? _timer;
     private Task? _timerTask;
 

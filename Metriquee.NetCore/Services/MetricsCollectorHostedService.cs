@@ -36,7 +36,10 @@ internal sealed class MetricsCollectorHostedService : BackgroundService
 
         var interval = TimeSpan.FromSeconds(_options.Metrics.IntervalSeconds);
         using (var process = Process.GetCurrentProcess())
+        {
             _lastCpuTime = process.TotalProcessorTime;
+        }
+
         _lastCheck = DateTimeOffset.UtcNow;
 
         while (!stoppingToken.IsCancellationRequested)
