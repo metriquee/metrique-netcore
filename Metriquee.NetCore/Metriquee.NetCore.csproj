@@ -8,15 +8,21 @@
         <PackageId>Metriquee.NetCore</PackageId>
         <Version>1.0.0</Version>
         <Title>Logging, Tracking, Monitoring all in one solution</Title>
-        <Authors>ElkhanB and HamidM</Authors>
-        <Description>Application Logging, Tracking and Monitoring Package</Description>
-        <RepositoryUrl></RepositoryUrl>
+        <Authors>Hamid Musayev</Authors>
+        <Description>Drop-in middleware that automatically monitors your ASP.NET Core app. It tracks:
+
+- **HTTP requests** — path, method, status, duration, headers, optional bodies
+- **Exceptions** — unhandled exceptions with inner chain and stack trace
+- **Runtime metrics** — CPU, memory, GC, thread pool, requests/sec
+- **Health** — periodic health status</Description>
+        <RepositoryUrl>https://github.com/metriquee</RepositoryUrl>
         <RepositoryType>GitHub</RepositoryType>
-        <PackageTags>log, collector, monitoring, tracking</PackageTags>
+        <PackageTags>log, monitoring, tracking, health</PackageTags>
         <PackageLicenseExpression>MIT</PackageLicenseExpression>
         <PackageReadmeFile>README.md</PackageReadmeFile>
         <IncludeSymbols>true</IncludeSymbols>
         <SymbolPackageFormat>snupkg</SymbolPackageFormat>
+        <PackageProjectUrl>https://github.com/metriquee</PackageProjectUrl>
     </PropertyGroup>
 
     <ItemGroup>
