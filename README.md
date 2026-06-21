@@ -2,17 +2,14 @@
 
 **.NET 9 · ASP.NET Core · MIT**
 
-Drop-in middleware that automatically monitors your ASP.NET Core app. It tracks:
+Drop-in middleware that automatically monitors your ASP.NET Core app:
 
 - **HTTP requests** — path, method, status, duration, headers, optional bodies
 - **Exceptions** — unhandled exceptions with inner chain and stack trace
 - **Runtime metrics** — CPU, memory, GC, thread pool, requests/sec
 - **Health** — periodic status, plus your own custom health checks
 
-Collected data flows to a configurable **sink**: write to `ILogger` (default), POST to a remote
-collector over HTTP, or both.
-
----
+Collected data flows to a **sink**: `ILogger` (default), a remote collector over HTTP, or both.
 
 ## Install
 
@@ -22,7 +19,7 @@ dotnet add package Metriquee.NetCore
 
 ## Quick start
 
-Two lines — logs everything to `ILogger` with default settings:
+Two lines — logs everything to `ILogger`:
 
 ```csharp
 using Metriquee.NetCore.Extensions;
@@ -31,14 +28,14 @@ var builder = WebApplication.CreateBuilder(args);
 builder.Services.AddMetriquee();   // 1. register
 
 var app = builder.Build();
-app.UseMetriquee();                   // 2. add middleware
+app.UseMetriquee();                // 2. add middleware
 app.Run();
 ```
 
 ## Send to a collector
 
-To ship telemetry to a remote collector instead of (or as well as) `ILogger`, enable the sender sink
-and paste the **connection string** you got when you registered the app:
+Enable the sender sink and paste the **connection string** you got when you registered the app in the
+Metriquee dashboard:
 
 ```csharp
 builder.Services.AddMetriquee(opts =>
@@ -49,24 +46,19 @@ builder.Services.AddMetriquee(opts =>
 });
 ```
 
-> **Where does the connection string come from?** Register your app in the Metriquee dashboard.
-
-### Sink modes
-
-| `EnableLoggerSink` | `EnableSenderSink` | Result                   |
-|--------------------|--------------------|--------------------------|
-| `true` (default)   | `false` (default)  | Logger only              |
-| `false`            | `true`             | Sender only              |
-| `true`             | `true`             | Both                     |
-| `false`            | `false`            | No-op (nothing recorded) |
-
----
+| `EnableLoggerSink` | `EnableSenderSink` | Result |
+|--------------------|--------------------|--------|
+| `true` (default)   | `false` (default)  | Logger only |
+| `false`            | `true`             | Sender only |
+| `true`             | `true`             | Both |
+| `false`            | `false`            | No-op |
 
 ## Custom health checks
 
-Write your own checks the same way you would with ASP.NET Core's `IHealthCheck`, but using the
-package's `IMetriqueeChecker` interface. Each check runs on its own interval and shows up in the
-dashboard under the name you give it, with its status, interval, last-run time, and message.
+Implement `IMetriqueeChecker`; each check runs on its own interval and appears in the dashboard with
+its status, last-run time, and message. Checkers are resolved from a fresh DI scope per run (inject
+scoped services like a `DbContext`), and a throwing check is reported as `Unhealthy` without affecting
+the others.
 
 ```csharp
 using Metriquee.NetCore.Checks;
@@ -74,122 +66,69 @@ using Metriquee.NetCore.Checks;
 public sealed class DatabaseHealthCheck(MyDbContext db) : IMetriqueeChecker
 {
     public async Task<MetriqueeCheckResult> CheckHealthAsync(CancellationToken ct = default)
-    {
-        if (await db.Database.CanConnectAsync(ct))
-            return MetriqueeCheckResult.Healthy("Database reachable");
-
-        return MetriqueeCheckResult.Unhealthy("Cannot reach database");
-    }
+        => await db.Database.CanConnectAsync(ct)
+            ? MetriqueeCheckResult.Healthy("Database reachable")
+            : MetriqueeCheckResult.Unhealthy("Cannot reach database");
 }
 ```
-
-Register it with `AddChecker<T>(name, intervalSeconds)`:
 
 ```csharp
 builder.Services.AddMetriquee(opts =>
 {
-    opts.Health.AddChecker<DatabaseHealthCheck>("database", 30);            // runs every 30s
+    opts.Health.AddChecker<DatabaseHealthCheck>("database", 30);             // runs every 30s
     opts.Health.AddChecker<RedisHealthCheck>("redis", 15, isEnabled: false); // registered but off
 });
 ```
 
-- **Return a result** with `MetriqueeCheckResult.Healthy(...)`, `.Degraded(...)`, or
-  `.Unhealthy(message, exception)`. Each accepts an optional `description` and a `data` dictionary.
-- **Dependency injection works** — checkers are resolved from a fresh DI scope on every run, so you
-  can inject scoped services such as a `DbContext`.
-- **Exceptions are caught** — if `CheckHealthAsync` throws, the check is reported as `Unhealthy`
-  with the exception message; one failing check never stops the others.
-- **`isEnabled: false`** keeps a check registered but does not run it (it won't appear in the dashboard).
-- The overall health status is the worst of all checks, published every `Health.IntervalSeconds`.
-
----
-
 ## Configuration
 
-All settings live on `MetriqueeOptions`, passed to `AddMetriquee(opts => ...)`.
+All settings live on `MetriqueeOptions`, passed to `AddMetriquee(opts => ...)` or bound from config.
 
 **Sender** — `opts.Sender`
 
-| Property           | Default | Description                                                                               |
-|--------------------|---------|-------------------------------------------------------------------------------------------|
-| `EnableLoggerSink` | `true`  | Write events to `ILogger`                                                                 |
-| `EnableSenderSink` | `false` | Send events to the collector over HTTP                                                    |
-| `ConnectionString` | `""`    | Combined `scheme://<apiKey>@host` — collector endpoint + ingest key (required for sender) |
-
-> `BaseUrl` and `ApiKey` are read-only values derived from `ConnectionString`.
+| Property | Default | Description |
+|----------|---------|-------------|
+| `EnableLoggerSink` | `true`  | Write events to `ILogger` |
+| `EnableSenderSink` | `false` | Send events to the collector over HTTP |
+| `ConnectionString` | `""`    | Combined `scheme://<apiKey>@host` — endpoint + key (required for sender) |
 
 **HTTP** — `opts.Http`
 
-| Property                    | Default                             | Description                                       |
-|-----------------------------|-------------------------------------|---------------------------------------------------|
-| `IsEnabled`                 | `true`                              | Enable HTTP logging                               |
-| `ShouldCaptureRequestBody`  | `false`                             | Capture request bodies                            |
-| `ShouldCaptureResponseBody` | `false`                             | Capture response bodies                           |
-| `MaxBodyBytes`              | `4096`                              | Max body bytes captured (rest truncated)          |
-| `ExcludedPaths`             | empty                               | Path prefixes to skip (case-insensitive)          |
-| `SensitiveHeaders`          | `Authorization, Cookie, Set-Cookie` | Header values replaced with `***`                 |
-| `MaskedFields`              | `password`                          | JSON field values replaced with `***` (recursive) |
+| Property | Default | Description |
+|----------|---------|-------------|
+| `IsEnabled` | `true` | Enable HTTP logging |
+| `ShouldCaptureRequestBody` / `ShouldCaptureResponseBody` | `false` | Capture bodies |
+| `MaxBodyBytes` | `4096` | Max body bytes captured (rest truncated) |
+| `ExcludedPaths` | empty | Path prefixes to skip (case-insensitive) |
+| `SensitiveHeaders` | `Authorization, Cookie, Set-Cookie` | Header values replaced with `***` |
+| `MaskedFields` | `password` | JSON field values replaced with `***` (recursive) |
 
 **Exceptions** — `opts.Exceptions`
 
-| Property             | Default | Description                       |
-|----------------------|---------|-----------------------------------|
-| `IsEnabled`          | `true`  | Enable exception tracking         |
-| `IncludeStackTrace`  | `true`  | Include stack traces              |
-| `MaxStackTraceLines` | `100`   | Truncate stack traces past this   |
-| `ExcludedExceptions` | empty   | Exception type full names to skip |
+| Property | Default | Description |
+|----------|---------|-------------|
+| `IsEnabled` | `true` | Enable exception tracking |
+| `IncludeStackTrace` | `true` | Include stack traces |
+| `MaxStackTraceLines` | `100` | Truncate stack traces past this |
+| `ExcludedExceptions` | empty | Exception type full names to skip |
 
-**Metrics** — `opts.Metrics` · **Health** — `opts.Health`
+**Metrics / Health / Batch**
 
-| Property                  | Default | Description                      |
-|---------------------------|---------|----------------------------------|
-| `Metrics.IsEnabled`       | `true`  | Enable metrics collection        |
-| `Metrics.IntervalSeconds` | `30`    | Seconds between metrics samples  |
-| `Health.IsEnabled`        | `true`  | Enable health publishing         |
-| `Health.IntervalSeconds`  | `60`    | Seconds between health publishes |
-
-Register custom checks with `opts.Health.AddChecker<T>(name, intervalSeconds)` — see
-[Custom health checks](#custom-health-checks).
-
-**Batch** (sender sink) — `opts.Batch`
-
-| Property               | Default | Description                      |
-|------------------------|---------|----------------------------------|
-| `MaxBatchSize`         | `100`   | Events before an automatic flush |
-| `MaxPayloadSizeMb`     | `2`     | Split batches larger than this   |
-| `FlushIntervalSeconds` | `5`     | Seconds between periodic flushes |
-
-### Full example
-
-```csharp
-builder.Services.AddMetriquee(opts =>
-{
-    opts.Sender.EnableSenderSink = true;
-    opts.Sender.ConnectionString = "https://mq_live_abc123@collector.example.com";
-
-    opts.Http.ShouldCaptureRequestBody  = true;
-    opts.Http.ShouldCaptureResponseBody = true;
-    opts.Http.MaxBodyBytes = 8192;
-    opts.Http.ExcludedPaths    = new(StringComparer.OrdinalIgnoreCase) { "/health", "/swagger" };
-    opts.Http.SensitiveHeaders = new(StringComparer.OrdinalIgnoreCase) { "Authorization", "X-Api-Key" };
-    opts.Http.MaskedFields     = new(StringComparer.OrdinalIgnoreCase) { "password", "token" };
-
-    opts.Exceptions.MaxStackTraceLines = 50;
-    opts.Metrics.IntervalSeconds = 15;
-    opts.Health.IntervalSeconds  = 30;
-});
-```
+| Property | Default | Description |
+|----------|---------|-------------|
+| `Metrics.IntervalSeconds` | `30` | Seconds between metrics samples |
+| `Health.IntervalSeconds` | `60` | Seconds between health publishes |
+| `Batch.MaxBatchSize` | `100` | Events before an automatic flush (sender) |
+| `Batch.MaxPayloadSizeMb` | `2` | Split batches larger than this |
+| `Batch.FlushIntervalSeconds` | `5` | Seconds between periodic flushes |
 
 ### Via appsettings.json
-
-Bind the options from configuration instead of (or alongside) code:
 
 ```json
 {
   "Metriquee": {
     "Sender":     { "EnableSenderSink": true, "ConnectionString": "https://mq_live_abc123@collector.example.com" },
-    "Http":       { "ShouldCaptureRequestBody": true, "ShouldCaptureResponseBody": true, "MaxBodyBytes": 4096,
-                    "ExcludedPaths": ["/health", "/swagger"], "MaskedFields": ["password", "secret"] },
+    "Http":       { "ShouldCaptureRequestBody": true, "MaxBodyBytes": 4096, "MaskedFields": ["password", "secret"] },
     "Exceptions": { "MaxStackTraceLines": 100 },
     "Metrics":    { "IntervalSeconds": 30 },
     "Health":     { "IntervalSeconds": 60 }
@@ -203,12 +142,9 @@ builder.Services.Configure<Metriquee.NetCore.Options.MetriqueeOptions>(
     builder.Configuration.GetSection("Metriquee"));
 ```
 
----
-
 ## Notes
 
-- **Privacy** — sensitive headers and masked JSON fields are replaced with `***` before anything is
-  recorded. Bodies are only captured when explicitly enabled, and always truncated to `MaxBodyBytes`.
-- **Path exclusion** — requests whose path starts with any `ExcludedPaths` prefix are skipped entirely.
+- **Privacy** — sensitive headers and masked JSON fields become `***` before anything is recorded;
+  bodies are captured only when enabled and always truncated to `MaxBodyBytes`.
 - **Trace ID** — taken from `Activity.Current` (falls back to `HttpContext.TraceIdentifier`) so HTTP
   and exception events correlate.
