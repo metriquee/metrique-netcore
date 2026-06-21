@@ -1,3 +1,4 @@
+using System.Reflection;
 using Metriquee.NetCore.Abstractions;
 using Metriquee.NetCore.Internal;
 using Metriquee.NetCore.Middleware;
@@ -23,6 +24,17 @@ public static class MetriqueeExtensions
                            SenderConnectionString.TryParse(o.Sender.ConnectionString, out _, out _),
                 "Sender sink is enabled but Sender.ConnectionString is missing or invalid " +
                 "(expected scheme://<apiKey>@host).")
+            // Auto-fill resource tags left blank after the user's configure runs. Only fills empties,
+            // so an explicit opts.Resource.* always wins.
+            .PostConfigure<IHostEnvironment>((o, hostEnv) =>
+            {
+                if (string.IsNullOrWhiteSpace(o.Resource.Environment))
+                    o.Resource.Environment = hostEnv.EnvironmentName;
+                if (string.IsNullOrWhiteSpace(o.Resource.Host))
+                    o.Resource.Host = System.Environment.MachineName;
+                if (string.IsNullOrWhiteSpace(o.Resource.Release))
+                    o.Resource.Release = DefaultRelease();
+            })
             .ValidateOnStart();
         if (configure is not null)
         {
@@ -93,5 +105,15 @@ public static class MetriqueeExtensions
         app.UseMiddleware<HttpLoggingMiddleware>();
         app.UseMiddleware<ExceptionLoggingMiddleware>();
         return app;
+    }
+
+    // Best-effort release/version of the host app: prefer the informational version (e.g. SemVer with
+    // git hash), fall back to the assembly version, then empty.
+    private static string DefaultRelease()
+    {
+        var asm = Assembly.GetEntryAssembly();
+        return asm?.GetCustomAttribute<AssemblyInformationalVersionAttribute>()?.InformationalVersion
+               ?? asm?.GetName().Version?.ToString()
+               ?? string.Empty;
     }
 }

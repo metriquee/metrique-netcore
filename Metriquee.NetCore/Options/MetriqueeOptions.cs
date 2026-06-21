@@ -8,4 +8,5 @@ public sealed record MetriqueeOptions
     public HealthOptions Health { get; set; } = new();
     public BatchOptions Batch { get; set; } = new();
     public SenderOptions Sender { get; set; } = new();
+    public ResourceOptions Resource { get; set; } = new();
 }

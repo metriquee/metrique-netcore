@@ -134,6 +134,9 @@ internal sealed class SenderCollectorSink(
         {
             ApiKey = Options.Sender.ApiKey,
             FlushedAt = DateTimeOffset.UtcNow,
+            Environment = Options.Resource.Environment,
+            Release = Options.Resource.Release,
+            Host = Options.Resource.Host,
             HttpEvents = httpEvents,
             ExceptionEvents = exceptionEvents,
             MetricsEvents = metricsEvents,

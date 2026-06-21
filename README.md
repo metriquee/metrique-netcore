@@ -92,6 +92,26 @@ All settings live on `MetriqueeOptions`, passed to `AddMetriquee(opts => ...)` o
 | `EnableSenderSink` | `false` | Send events to the collector over HTTP |
 | `ConnectionString` | `""`    | Combined `scheme://<apiKey>@host` — endpoint + key (required for sender) |
 
+**Resource tags** — `opts.Resource`
+
+Stamped onto every batch so telemetry can be filtered by deployment environment and release in the
+dashboard. All three auto-default when left blank — set `Release` per deploy for meaningful
+release/regression tracking.
+
+| Property | Default | Description |
+|----------|---------|-------------|
+| `Environment` | `IHostEnvironment.EnvironmentName` (e.g. `Production`) | Deployment environment |
+| `Release` | entry assembly informational version | Running app version, e.g. `1.4.2` |
+| `Host` | machine name | Host / instance identifier |
+
+```csharp
+builder.Services.AddMetriquee(opts =>
+{
+    opts.Resource.Environment = "Production";
+    opts.Resource.Release     = "1.4.2";   // e.g. your CI build / git tag
+});
+```
+
 **HTTP** — `opts.Http`
 
 | Property | Default | Description |
